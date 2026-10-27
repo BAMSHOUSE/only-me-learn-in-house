@@ -1,0 +1,88 @@
+/* Only Me Learn: Electric Blue + Acid Lime, based on the Canva design brief. */
+:root{--primary:#2854e8;--muted:#657087;--ink:#161d31;--lime:#ddfa77;--line:#e3e7f0;--blue-wash:#eef2ff;color:var(--ink);background:#f7f8fc}
+body{color:var(--ink);background:#f7f8fc}
+h1,h2,h3,.student-name,.assignee-name,.due-date{color:var(--ink)}
+.app-header{background:#161d31;border-right:1px solid #222c45}
+.app-header .brand{font-weight:700}.brand-icon{background:#ddfa77;color:#161d31;border-radius:12px}
+.brand-sub{color:#c5cee3}
+.app-header nav button{color:#c5cee3;font-size:14px;border-radius:12px}
+.app-header nav button.active,.app-header nav button.active:hover{background:#2854e8;box-shadow:none;color:#fff}
+.app-header nav button.active svg{color:#ddfa77}
+.app-header nav button:hover{background:#252e46;color:#fff}
+.header-tools .actor-picker{background:#202940;border:1px solid #374057;border-radius:12px;color:#c5cee3}
+.actor-picker select{color:#fff}
+.sync-strip{border-bottom:1px solid var(--line);background:#fff}
+.sync-strip strong{color:#657087;font-weight:500}.live-dot{background:#2854e8}
+.workspace{padding-top:32px}
+.panel,.filter-bar{border-color:var(--line);box-shadow:none;border-radius:14px}
+.button{border-radius:9px;transition:background .15s,border-color .15s;min-height:38px}
+.button.primary{background:#2854e8;border-color:#2854e8;color:#fff;box-shadow:none}
+.button.primary:hover{background:#1e43c2;border-color:#1e43c2}
+.button.secondary{border-color:#dce2ef;color:#2854e8}
+.button.secondary:hover{background:#eef2ff;border-color:#b9c8fa}
+.button.green-solid{background:#ddfa77;border-color:#c7e565;color:#161d31;font-weight:600;box-shadow:none}
+.button.green-solid:hover{background:#cfee66;border-color:#b9d858}
+.button.rose-outline{background:#fff;color:#b33752;border-color:#efc8d1}
+.button.rose-solid{background:#b33752;border-color:#b33752;color:white}
+.button:focus-visible,.icon-button:focus-visible,.text-link:focus-visible,.student-name:focus-visible{outline:3px solid #2854e8;outline-offset:3px}
+input:focus,select:focus,textarea:focus{border-color:#2854e8;box-shadow:0 0 0 3px #2854e81a}
+.text-link,.text-button,.breadcrumb button,.push-message{color:#2854e8}
+.month-home-heading h1{font-weight:700;color:#161d31}
+.home-year{background:#ddfa77;color:#161d31;border:1px solid #d0e984;border-radius:12px;padding:12px 18px}
+.home-year select{border-color:#c9df88;border-radius:8px;color:#161d31}
+.month-grid{gap:20px}
+.month-tile{background:#eef2ff;border:1px solid #dbe3ff;border-radius:16px;color:#161d31;box-shadow:none}
+.month-tile strong{font-size:27px;font-weight:600}
+.month-tile:hover,.month-tile:focus-visible,.month-tile.selected{background:#2854e8;border-color:#2854e8;color:#fff;box-shadow:0 8px 20px #2854e81a}
+.month-tile:focus-visible{outline:3px solid #161d31;outline-offset:4px}
+.month-tile.selected{box-shadow:inset 0 -5px 0 #ddfa77}
+.status-tabs{background:#f4f6fc;border-color:#e3e7f0;padding:4px}
+.status-tabs button{border-radius:8px;color:#59647a}
+.status-tabs button.selected{background:#2854e8;color:white;box-shadow:none}
+.status-tabs button.selected span{color:#ddfa77}
+.search{border-color:#dce2ef;border-radius:10px}
+.count-chip{background:#ddfa77;color:#161d31;border-color:#d0e984}
+th{background:#f7f8fc;color:#657087;border-color:var(--line)}
+td{border-color:#edf0f6}
+.student-avatar{background:#eef2ff;color:#2854e8}
+.student-avatar.delivered{background:#e6f5ec;color:#226343}
+.ref-chip{background:#eef2ff;color:#2854e8;border-color:#dce4ff;border-radius:7px}
+.badge.in_progress,.track-chip.in_progress{background:#eef2ff;color:#244acb;border-color:#cedaff}
+.badge.approved,.badge.delivered,.track-chip.approved{background:#e6f5ec;color:#226343;border-color:#b8dec9}
+.badge.not_started,.track-chip.not_started{background:#f1f3f7;color:#657087;border-color:#dce2eb}
+.progress-track{background:#e7ecf8;height:8px}
+.progress-track>span,.progress-track.attention>span{background:#2854e8}
+.progress-numbers strong,.progress-numbers .rose{color:#2854e8!important}
+.progress-numbers strong.green{color:#226343!important}
+.page-button{border-radius:8px}.page-button.active{background:#2854e8;border-color:#2854e8;color:#fff}
+.summary-progress{background:#fff;border:1px solid #dce4ff;border-radius:14px}
+.summary-progress>span{color:#657087}
+.step-row{border-radius:14px}
+.step-row.available{border-color:#ccd8ff;background:#edf2ff}
+.step-row.available>.step-bar{background:#edf2ff;color:#161d31}
+.step-row.complete{border-color:#bddfca;background:#e5f4eb}
+.step-row.complete>.step-bar{background:#e5f4eb;color:#226343}
+.step-row.locked{border-color:#e0e4eb;background:#eff1f5}
+.step-row.locked>.step-bar{background:#eff1f5;color:#717b8e}
+.step-index{display:grid;place-items:center;min-width:32px;height:32px;border-radius:9px;background:#ffffff80;opacity:1;color:inherit}
+.step-name{font-size:17px}
+.deadline-bar{background:#ddfa77;border-color:#d0e984;border-radius:12px;color:#161d31}
+.deadline-bar>span{color:#4a5b25}
+.student-audit>summary{border-radius:12px;border-color:var(--line);color:#536078}
+.event{background:#fff;border-color:var(--line);border-radius:12px}
+.event-action{color:#2854e8}.event-dot{background:#2854e8}.event-dot.green-bg{background:#77ae85}.event-dot.rose-bg{background:#b33752}
+.event-details summary{color:#657087}
+.modal{border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 80px #161d3129}
+.modal-info{background:#f2f5ff;color:#536078;border-radius:9px}
+.push-options{border-color:#dce2ef;border-radius:14px;box-shadow:0 12px 36px #161d3120}
+.push-active{background:#f2fbd9!important;color:#34461b!important;border-color:#d0e984!important}
+.toast{background:#161d31;color:white;border-color:#161d31}.toast svg{color:#ddfa77}
+@media(max-width:760px){.app-header nav button{font-size:13px}.workspace{padding-top:24px}.month-grid{gap:14px}.month-tile strong{font-size:23px}.month-tile{border-radius:13px}.step-bar{gap:10px}.step-name{font-size:16px}.status-tabs button{font-size:11px}.step-index{min-width:28px;height:28px}.push-toggle{min-height:36px}}
+@media(prefers-reduced-motion:reduce){.button,.month-tile{transition:none}}
+
+.back-navigation{margin-bottom:20px}.back-navigation .button{min-height:44px}
+
+@media(min-width:761px){.table-scroll table{min-width:760px}.table-scroll th:nth-child(1){width:22%}.table-scroll th:nth-child(2){width:16%}.table-scroll th:nth-child(3){width:20%}.table-scroll th:nth-child(4){width:16%}.table-scroll th:nth-child(5){width:16%}.table-scroll th:nth-child(6){width:10%}}
+@media(max-width:760px){.table-scroll td:last-child{grid-column:1/-1;width:100%;margin-top:0}.table-scroll td:last-child>.button{width:100%;margin-top:6px}}
+
+@media(max-width:760px){.month-tile strong{font-size:clamp(14px,3.8vw,23px)}}
