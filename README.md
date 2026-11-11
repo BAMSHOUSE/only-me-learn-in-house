@@ -4,9 +4,9 @@ Public source snapshot of the course production tracker. Production data, creden
 
 ## Configure before deploying
 
-Replace AIRTABLE_BASE_ID, AIRTABLE_TABLE_ID and the AIRTABLE_*_FIELD_ID placeholders in lib/airtable-sync.ts with your own identifiers. Set GOOGLE_DRIVE_ROOT_ID to your existing Drive root and owner@example.com in app/mcp/route.ts to your authorized owner email (update the test fixture too). Create a new Sites project to supply its own project_id; configure D1, runtime session and push secrets separately. The hourly cloud task and connected Airtable/Drive accounts are hosted configuration and are not installed by cloning this repository. Do not commit credentials.
+Configure GOOGLE_SHEET_ID, SALES_TAB_GID, GOOGLE_DRIVE_ROOT_ID and owner@example.com for your installation. Historical mappings use illustrative fixtures. Supply your own Sites project, D1 binding and runtime secrets. Connect Google Sheets and Drive and configure the scheduled task separately.
 
-Snapshot: dfee4e0e9e5b5cb1b7a02ee6c2c97321032694ab.
+Production source snapshot: f2be31e.
 
 # vinext-starter
 

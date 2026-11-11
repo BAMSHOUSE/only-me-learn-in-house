@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { isVisibleJob } from "../../../lib/job-visibility";
 import { validSession, sameOrigin } from "../../../lib/session";
 import { ensureSync, applyInitialImport } from "../../../lib/airtable-sync";
 import { notifyWork } from "../../../lib/push";
@@ -8,7 +9,7 @@ import { ready, deadlineAfterApproval, type Job, type Item } from "../../../lib/
 export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
-const TYPES = ["thai_scenario","english_script","video_assets","vocabulary","listening","exercise","imitation","pdf","timestamps"] as const;
+const TYPES = ["thai_scenario","english_script","video_assets","vocabulary","listening","exercise","imitation","pdf","timestamps","admin_send"] as const;
 type ItemType = typeof TYPES[number];
 type Action = "create" | "audio" | "start" | "submit" | "approve" | "reject" | "customer_approve" | "customer_reject" | "deliver";
 const json = (body: unknown, status = 200) => Response.json(body, {status, headers: {"Cache-Control":"no-store"}});
@@ -26,13 +27,17 @@ export async function GET(request: Request) {
     await ensureWorkflow();
     const database = db();
     const [jobs,items,members,events,airtableCheck] = await Promise.all([
-      database.prepare("SELECT jobs.*,airtable_records.occupation FROM jobs LEFT JOIN airtable_records ON airtable_records.job_id=jobs.id ORDER BY jobs.updated_at DESC").all(),
+      database.prepare("SELECT jobs.*,student_nicknames.nickname AS short_name,airtable_records.occupation,folder_numbers.number AS folder_number FROM jobs LEFT JOIN airtable_records ON airtable_records.job_id=jobs.id LEFT JOIN student_nicknames ON student_nicknames.record_id=airtable_records.record_id LEFT JOIN folder_numbers ON folder_numbers.record_id=airtable_records.record_id ORDER BY jobs.year DESC,jobs.month DESC,COALESCE(folder_numbers.number,2147483647),jobs.created_at,jobs.id").all(),
       database.prepare("SELECT * FROM work_items WHERE type!='final_qa'").all(),
       database.prepare("SELECT * FROM team_members WHERE active=1 ORDER BY role,name").all(),
       database.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 500").all(),
-      database.prepare("SELECT value FROM integration_meta WHERE key='last_success'").first<{value:string}>(),
+      database.prepare("SELECT value FROM integration_meta WHERE key='last_google_sheets_success'").first<{value:string}>(),
     ]);
-    return json({jobs:jobs.results,items:items.results,members:members.results,events:events.results,lastAirtableCheck:airtableCheck?.value??null});
+    return json({jobs:jobs.results.filter(job=>isVisibleJob(String(job.id))).map(job=>{
+      const fullName = String(job.nickname);
+      const suffix = job.short_name ? " (" + job.short_name + ")" : "";
+      return {...job,nickname:fullName.endsWith(suffix) ? fullName : fullName + suffix};
+    }),items:items.results.filter(item=>isVisibleJob(String(item.job_id))),members:members.results,events:events.results.filter(event=>isVisibleJob(String(event.job_id))),lastAirtableCheck:airtableCheck?.value??null});
   } catch (error) { return json({error:String(error)},500); }
 }
 
@@ -49,8 +54,9 @@ export async function POST(request: Request) {
     const actorId = String(data.actorId || "");
     const actor = await database.prepare("SELECT id,name,role FROM team_members WHERE id=? AND active=1").bind(actorId).first<{id:string;name:string;role:string}>();
     if (!actor) return json({error:"กรุณาเลือกชื่อผู้กด"},400);
-    if (action === "create") return json({error:"ระบบรับงานจาก Airtable เท่านั้น ไม่รองรับการสร้างงานด้วยมือ"},403);
+    if (action === "create") return json({error:"ระบบรับงานจาก Google Sheets เท่านั้น ไม่รองรับการสร้างงานด้วยมือ"},403);
     const jobId = String(data.jobId || "");
+    if (!isVisibleJob(jobId)) return json({error:"Job is archived"},404);
     const job = await database.prepare("SELECT * FROM jobs WHERE id=?").bind(jobId).first<Record<string,unknown>>();
     if (!job) return json({error:"ไม่พบงาน"},404);
     const itemsResult = await database.prepare("SELECT * FROM work_items WHERE job_id=?").bind(jobId).all<Record<string,unknown>>();
@@ -63,7 +69,7 @@ export async function POST(request: Request) {
     if (!requestKey || requestKey.length > 100) return json({error:"คำขอไม่มีรหัสป้องกันการกดซ้ำ"},400);
     const duplicate = await database.prepare("SELECT id FROM events WHERE request_key=?").bind(requestKey).first();
     if (duplicate) return json({ok:true,duplicate:true});
-    if (job.delivered_at || items.timestamps?.status === "approved") return json({error:"งานนี้เสร็จสิ้นแล้ว"},409);
+    if (job.delivered_at || items.admin_send?.status === "approved") return json({error:"งานนี้เสร็จสิ้นแล้ว"},409);
     const now = new Date().toISOString();
     if (action === "audio") {
       if (job.audio_received) return json({error:"บันทึกไฟล์เสียงแล้ว กรุณารีเฟรช"},409);
@@ -83,13 +89,13 @@ export async function POST(request: Request) {
     if (action === "submit" || action === "start") {
       if (!(action==="start"?["not_started","rejected"]:["not_started","in_progress","rejected"]).includes(current)) return json({error:"สถานะเปลี่ยนแล้ว กรุณารีเฟรช"},409);
       if (!ready(type,job as unknown as Job,items as unknown as Record<string,Item>)) return json({error:"รอขั้นตอนก่อนหน้าผ่านก่อน"},409);
-      next = action==="start" ? "in_progress" : ["english_script","video_assets"].includes(type) ? "approved" : "submitted";
+      next = action==="start" ? "in_progress" : ["english_script","video_assets","vocabulary","admin_send"].includes(type) ? "approved" : "submitted";
     } else if (action === "customer_approve" || action === "customer_reject") {
       if (type !== "thai_scenario" || current !== "submitted") return json({error:"บันทึกผลลูกค้าหลังส่งสถานการณ์ไทย"},409);
       if (action === "customer_reject" && !note) return json({error:"กรุณาระบุสิ่งที่ลูกค้าต้องการแก้ไข"},400);
       next = action === "customer_approve" ? "approved" : "rejected";
     } else if (action === "approve" || action === "reject") {
-      if (current !== "submitted" || ["thai_scenario","english_script","video_assets"].includes(type)) return json({error:"ขั้นนี้ยังไม่พร้อมตรวจ"},409);
+      if (current !== "submitted" || ["thai_scenario","english_script","video_assets","vocabulary","admin_send"].includes(type)) return json({error:"ขั้นนี้ยังไม่พร้อมตรวจ"},409);
       if (action === "reject" && !note) return json({error:"กรุณาระบุสิ่งที่ต้องแก้ไข"},400);
       if (!ready(type,job as unknown as Job,items as unknown as Record<string,Item>)) return json({error:"รอขั้นตอนก่อนหน้าผ่านก่อน"},409);
       next = action === "approve" ? "approved" : "rejected";

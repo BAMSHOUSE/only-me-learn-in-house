@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   title: "Only Me Learn in House — Course Ops",
   description: "ติดตามการผลิตคอร์สเรียน พร้อมสถานะงาน การอนุมัติ และประวัติการทำงาน",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/only-me-learn-logo.png",
+    shortcut: "/only-me-learn-logo.png",
   },
 };
 

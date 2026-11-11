@@ -7,4 +7,5 @@ export const signers = [
   {id:"signer-fluke",name:"Fluke"},
   {id:"signer-make",name:"Make"},
   {id:"signer-pon",name:"Pon"},
+  {id:"signer-jeff",name:"Jeff"},
 ];

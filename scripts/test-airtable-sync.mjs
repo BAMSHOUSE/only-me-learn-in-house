@@ -5,7 +5,8 @@ import ts from 'typescript';
 const sql=new DatabaseSync(':memory:');
 for(const f of fs.readdirSync('drizzle').filter(f=>f.endsWith('.sql')))sql.exec(fs.readFileSync('drizzle/'+f,'utf8'));
 sql.exec('PRAGMA foreign_keys=ON');
-const db={prepare(query){let values=[];return {bind(...args){values=args;return this},async first(){return sql.prepare(query).get(...values)||null},async all(){return {results:sql.prepare(query).all(...values)}},async run(){return {meta:{changes:Number(sql.prepare(query).run(...values).changes)}}}}},async batch(statements){sql.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}}};
+let batchTail=Promise.resolve();
+const db={prepare(query){let values=[];return {bind(...args){values=args;return this},async first(){return sql.prepare(query).get(...values)||null},async all(){return {results:sql.prepare(query).all(...values)}},async run(){return {meta:{changes:Number(sql.prepare(query).run(...values).changes)}}}}},async batch(statements){const previous=batchTail;let unlock;batchTail=new Promise(resolve=>unlock=resolve);await previous;sql.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());sql.exec('COMMIT');return results}catch(e){sql.exec('ROLLBACK');throw e}finally{unlock()}}};
 globalThis.__syncTestEnv={DB:db};
 const moduleURL=s=>'data:text/javascript;base64,'+Buffer.from(ts.transpileModule(s,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText).toString('base64');
 const workflowURL=moduleURL(fs.readFileSync('lib/workflow.ts','utf8'));
@@ -16,7 +17,7 @@ assert.equal((await runSyncTool('synchronize_student',row)).created,true);
 assert.equal((await runSyncTool('synchronize_student',row)).created,false);
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM jobs').get().n,1);
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM events').get().n,1);
-assert.equal(sql.prepare('SELECT COUNT(*) n FROM work_items').get().n,9);
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM work_items').get().n,10);
 sql.exec("UPDATE work_items SET status='approved',revision=3 WHERE type='english_script'; UPDATE jobs SET audio_received=1");
 await runSyncTool('synchronize_student',{...row,name:'Changed Name',occupation:'Doctor'});
 assert.equal(sql.prepare("SELECT status FROM work_items WHERE type='english_script'").get().status,'approved');
@@ -25,7 +26,7 @@ assert.equal(sql.prepare('SELECT occupation FROM airtable_records').get().occupa
 await assert.rejects(runSyncTool('synchronize_student',{...row,recordId:'recDuplicateFolder'}));
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM jobs').get().n,1,'duplicate folder must roll back job insertion');
 await assert.rejects(runSyncTool('synchronize_student',{...row,month:13}));
-const request={recordId:'recTestTwo',name:'Two',monthFolderId:row.monthFolderId,year:2026,month:10};
+const request={existingMaxNumber:0,recordId:'recTestTwo',name:'Two',monthFolderId:row.monthFolderId,year:2026,month:10};
 const first=await runSyncTool('claim_folder',request),second=await runSyncTool('claim_folder',request);
 assert.equal(first.acquired,true);assert.equal(second.acquired,false);
 const secondRow={...row,recordId:request.recordId,name:request.name,folderId:'FolderTestTwo002'};
@@ -61,12 +62,73 @@ delete globalThis.__syncTestEnv.AIRTABLE_INITIAL_IMPORT;
 await applyInitialImport();
 console.log('PASS: owner-provisioned initial import, scoped cleanup and no stale re-import');
 
-const scheduledTest={...row,recordId:'recExampleTest001',name:'OML SCHEDULE TEST 20261027-0938',folderId:'ScheduledTestFolder001'};
-const reserved=await runSyncTool('claim_folder',scheduledTest);
+const scheduledTest={...row,recordId:'recFixture0031',name:'OML SCHEDULE TEST 20261027-0938',folderId:'ScheduledTestFolder001'};
+const reserved=await runSyncTool('claim_folder',{...scheduledTest,existingMaxNumber:0});
 await runSyncTool('synchronize_student',{...scheduledTest,claimId:reserved.claim.claim_id});
 assert.equal((await runSyncTool('remove_confirmed_demo_jobs',{})).deletedJobs,1);
-for(const table of ['jobs','events','work_items'])assert.equal(sql.prepare('SELECT COUNT(*) n FROM '+table+' WHERE '+(table==='jobs'?'id':'job_id')+'=?').get('airtable-recExampleTest001').n,0);
-for(const table of ['airtable_records','folder_claims'])assert.equal(sql.prepare('SELECT COUNT(*) n FROM '+table+' WHERE record_id=?').get('recExampleTest001').n,0);
+for(const table of ['jobs','events','work_items'])assert.equal(sql.prepare('SELECT COUNT(*) n FROM '+table+' WHERE '+(table==='jobs'?'id':'job_id')+'=?').get('airtable-recFixture0031').n,0);
+for(const table of ['airtable_records','folder_claims'])assert.equal(sql.prepare('SELECT COUNT(*) n FROM '+table+' WHERE record_id=?').get('recFixture0031').n,0);
 assert.ok(sql.prepare("SELECT * FROM jobs WHERE id='other-real-job'").get());
 assert.equal(sql.prepare('SELECT COUNT(*) n FROM push_subscriptions').get().n,1);
 console.log('PASS: exact scheduled-test cleanup including claims and mappings; real data preserved');
+
+// Exercise Admin Send through the real handler with an isolated database.
+const signerURL=moduleURL(fs.readFileSync('lib/signers.ts','utf8'));
+const ensureURL=moduleURL(fs.readFileSync('lib/ensure-workflow.ts','utf8').replace('import { env } from "cloudflare:workers";','const env=globalThis.__syncTestEnv;').replace('"./signers"',JSON.stringify(signerURL)));
+const {ensureWorkflow}=await import(ensureURL);
+await ensureWorkflow();
+assert.equal(sql.prepare("SELECT name FROM team_members WHERE id='signer-jeff'").get().name,'Jeff');
+const migrationItem=sql.prepare("SELECT * FROM work_items WHERE job_id='other-real-job' AND type='admin_send'").get();
+assert.equal(migrationItem.status,'not_started');
+await ensureWorkflow();
+assert.equal(sql.prepare("SELECT COUNT(*) n FROM work_items WHERE job_id='other-real-job' AND type='admin_send'").get().n,1);
+const apiSource=fs.readFileSync('app/api/state/route.ts','utf8').replace('import { env } from "cloudflare:workers";','const env=globalThis.__syncTestEnv;').replace('import { validSession, sameOrigin } from "../../../lib/session";','const validSession=async()=>true;const sameOrigin=()=>true;').replace('import { notifyWork } from "../../../lib/push";','const notifyWork=()=>{};').replace('"../../../lib/airtable-sync"',JSON.stringify(syncURL)).replace('"../../../lib/ensure-workflow"',JSON.stringify(ensureURL)).replace('"../../../lib/workflow"',JSON.stringify(workflowURL));
+const visibilityURL=moduleURL(fs.readFileSync('lib/job-visibility.ts','utf8'));
+const api=await import(moduleURL(apiSource.replace('"../../../lib/job-visibility"',JSON.stringify(visibilityURL))));
+const send=async(action,key)=>api.POST(new Request('https://example.com/api/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,jobId:'airtable-recTestOne',type:'admin_send',actorId:'signer-jeff',requestKey:key})}));
+assert.equal((await send('submit','admin-before-timestamp')).status,409);
+sql.exec("UPDATE work_items SET status='approved' WHERE job_id='airtable-recTestOne' AND type='timestamps'");
+assert.equal((await send('approve','admin-approve')).status,409);
+assert.equal((await send('submit','admin-submit')).status,200);
+assert.equal(sql.prepare("SELECT status FROM work_items WHERE job_id='airtable-recTestOne' AND type='admin_send'").get().status,'approved');
+assert.equal(sql.prepare("SELECT actor_name FROM events WHERE request_key='admin-submit'").get().actor_name,'Jeff');
+assert.equal((await send('submit','admin-submit')).status,200);
+assert.equal(sql.prepare("SELECT COUNT(*) n FROM events WHERE request_key='admin-submit'").get().n,1);
+console.log('PASS: Jeff migration, Admin Send lock, submit without approval, actor history and duplicate protection');
+
+sql.exec("UPDATE work_items SET status='approved' WHERE job_id='airtable-recTestTwo' AND type='english_script'");
+for(const type of ['video_assets','vocabulary']){
+ const r=await api.POST(new Request('https://example.com/api/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',jobId:'airtable-recTestTwo',type,actorId:'signer-jeff',requestKey:'submit-direct-'+type})}));
+ assert.equal(r.status,200);assert.equal(sql.prepare('SELECT status FROM work_items WHERE job_id=? AND type=?').get('airtable-recTestTwo',type).status,'approved');
+}
+sql.exec("UPDATE work_items SET status='submitted' WHERE job_id='airtable-recTestTwo' AND type='vocabulary'");
+await ensureWorkflow();
+assert.equal(sql.prepare("SELECT status FROM work_items WHERE job_id='airtable-recTestTwo' AND type='vocabulary'").get().status,'approved');
+console.log('PASS: steps 5 and 6 complete on submit; existing pending submissions migrate');
+
+const {syncSchedule}=await import(syncURL);
+for(let hour=0;hour<24;hour++){const time='2026-10-30T'+String(hour).padStart(2,'0')+':04:00+07:00';assert.equal(syncSchedule(new Date(time)).checkDue,[7,9,11,13,15,17,19,21].includes(hour));}
+assert.equal(syncSchedule(new Date('2026-10-30T09:10:00+07:00'),'2026-10-30T02:04:00Z').checkDue,false);
+assert.equal(syncSchedule(new Date('2026-10-30T11:01:00+07:00'),'2026-10-30T02:04:00Z').checkDue,true);
+console.log('PASS: Bangkok two-hour schedule gate, overnight exclusions, same-slot deduplication');
+
+// Numbering stays stable across duplicate/concurrent claims and resets per month.
+const numbered={recordId:'recNumberOne',name:'First',monthFolderId:'NumberMonth202611',year:2026,month:11,existingMaxNumber:0};
+const n1=await runSyncTool('claim_folder',{...numbered,nickname:'  Nick  '});
+assert.equal(n1.claim.folder_name,'1. First (Nick)');
+const retry=await runSyncTool('claim_folder',{...numbered,existingMaxNumber:99});
+assert.equal(retry.acquired,false);assert.equal(retry.claim.folder_name,'1. First (Nick)');
+const pair=await Promise.all([runSyncTool('claim_folder',{...numbered,recordId:'recNumberTwo',name:'Second'}),runSyncTool('claim_folder',{...numbered,recordId:'recNumberTwo',name:'Second'})]);
+assert.equal(pair.filter(p=>p.acquired).length,1);assert(pair.every(p=>p.claim.folder_name==='2. Second'));
+const n3=await runSyncTool('claim_folder',{...numbered,recordId:'recNumberThree',name:'Third',existingMaxNumber:8});assert.equal(n3.claim.folder_name,'9. Third');
+const nextMonth=await runSyncTool('claim_folder',{...numbered,recordId:'recDecember',monthFolderId:'NumberMonth202612',month:12});assert.equal(nextMonth.claim.folder_name,'1. First');
+await assert.rejects(runSyncTool('claim_folder',{...numbered,recordId:'recBadNumber',existingMaxNumber:-1}));
+await assert.rejects(runSyncTool('claim_folder',{...numbered,recordId:'recMissingNumber',existingMaxNumber:undefined}));
+assert.equal(sql.prepare('SELECT COUNT(*) n FROM folder_numbers WHERE parent_id=?').get(numbered.monthFolderId).n,3);
+console.log('PASS: monthly numbering, stable retries, duplicate claims, Drive maximum, reset and invalid input');
+
+for(const [recordId,folderId] of [['recFixture0027','FixtureFolderOne'],['recFixture0028','FixtureFolderTwo'],['recFixture0029','FixtureFolderThree']])await runSyncTool('synchronize_student',{...row,recordId,folderId,monthFolderId:'FixtureMonthFolder'});
+const seeded=(await runSyncTool('sync_status',{})).records.filter(r=>r.month_folder_id==='FixtureMonthFolder');assert.deepEqual(seeded.map(r=>r.folder_number).sort(),[1,2,3]);
+const fourth=await runSyncTool('claim_folder',{...numbered,recordId:'recFourthActual',monthFolderId:'FixtureMonthFolder',year:2026,month:10});assert.equal(fourth.claim.folder_name,'4. First');
+const state=await (await api.GET(new Request('https://example.com/api/state'))).json();assert.equal(state.jobs.find(j=>j.id==='airtable-recFixture0029').folder_number,3);
+console.log('PASS: existing 1/2/3 seeded without progress changes, next number 4 and API numbering');

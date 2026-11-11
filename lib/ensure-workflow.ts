@@ -7,6 +7,8 @@ export async function ensureWorkflow() {
   await db.batch([
     ...signers.map(member=>db.prepare("INSERT OR IGNORE INTO team_members (id,name,role,active) VALUES (?,?,'signer',1)").bind(member.id,member.name)),
     db.prepare("INSERT OR IGNORE INTO work_items (id,job_id,type,status,revision,updated_at,asset_ref) SELECT id||'-vocabulary',id,'vocabulary',CASE WHEN delivered_at IS NOT NULL OR EXISTS(SELECT 1 FROM work_items w WHERE w.job_id=jobs.id AND w.type='timestamps' AND w.status='approved') THEN 'approved' ELSE 'not_started' END,0,updated_at,'' FROM jobs"),
+    db.prepare("INSERT OR IGNORE INTO work_items (id,job_id,type,status,revision,updated_at,asset_ref) SELECT id||'-admin_send',id,'admin_send',CASE WHEN delivered_at IS NOT NULL THEN 'approved' ELSE 'not_started' END,0,updated_at,'' FROM jobs"),
+    db.prepare("UPDATE work_items SET status='approved',revision=revision+1 WHERE type IN ('video_assets','vocabulary','admin_send') AND status='submitted'"),
     db.prepare("UPDATE jobs SET due_at="+deadline+" WHERE due_at IS NOT "+deadline),
   ]);
 }
